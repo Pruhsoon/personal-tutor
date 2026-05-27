@@ -8,6 +8,9 @@ Personal Learner turns your Obsidian study notes into an adaptive flashcard revi
 
 ## Screenshots
 
+<img width="1384" height="904" alt="image" src="https://github.com/user-attachments/assets/2679d531-5cae-4154-ad12-2833eb8a58ba" />
+<img width="706" height="535" alt="image" src="https://github.com/user-attachments/assets/d542b4f1-0e7d-408b-82b7-448aaa9d57f7" />
+
 <!-- Add screenshots here -->
 
 ### Dashboard
