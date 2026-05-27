@@ -7,15 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from sqlalchemy import func
 
-from app.models.models import User, Topic, Flashcard, TopicProficiency
+from app.models.models import User, Topic, Flashcard, ReviewLog, TopicProficiency
+from sqlalchemy.orm import selectinload
+from sqlalchemy import Date, cast
+
 from app.schemas.schemas import (
     UserCreate, UserResponse,
     TopicCreate, TopicResponse,
-    FlashcardResponse,
+    FlashcardResponse, SM2ReviewInput,
     IngestPayload, FlashcardGenerationResponse,
     TopicWithProficiency, DueCardsCount,
+    GenerateContentRequest, GenerateContentResponse,
+    SupplementContentRequest, SupplementContentResponse,
+    DailyProgress,
 )
 from app.services.llm_service import get_llm_service
+from app.services.spaced_repetition import calculate_sm2, get_next_review_date
 
 router = APIRouter()
 
@@ -64,13 +71,20 @@ async def create_topic(payload: TopicCreate, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/api/flashcards/due/{user_id}", response_model=list[FlashcardResponse], tags=["Flashcards"])
-async def get_due_flashcards(user_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_due_flashcards(
+    user_id: UUID,
+    topic_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db)
+):
     now = datetime.now(timezone.utc)
-    result = await db.execute(
-        select(Flashcard)
-        .where(Flashcard.user_id == user_id, Flashcard.next_review_date <= now)
-        .order_by(Flashcard.next_review_date)
+    stmt = select(Flashcard).options(selectinload(Flashcard.topic)).where(
+        Flashcard.user_id == user_id,
+        Flashcard.next_review_date <= now
     )
+    if topic_id:
+        stmt = stmt.where(Flashcard.topic_id == topic_id)
+    stmt = stmt.order_by(Flashcard.next_review_date)
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 
@@ -141,7 +155,11 @@ async def get_topics_by_user(user_id: UUID, db: AsyncSession = Depends(get_db)):
         .outerjoin(TopicProficiency, (TopicProficiency.topic_id == Topic.id) & (TopicProficiency.user_id == user_id))
         .outerjoin(Flashcard, Flashcard.topic_id == Topic.id)
         .where(Topic.user_id == user_id)
-        .group_by(Topic.id, TopicProficiency.mastery_score)
+        .group_by(
+            Topic.id, Topic.user_id, Topic.name,
+            Topic.obsidian_file_path, Topic.created_at,
+            TopicProficiency.mastery_score
+        )
         .order_by(Topic.name)
     )
 
@@ -170,3 +188,107 @@ async def get_due_flashcards_count(user_id: UUID, db: AsyncSession = Depends(get
     )
     count = result.scalar() or 0
     return DueCardsCount(count=count)
+
+
+@router.get("/api/users/{user_id}/progress", response_model=list[DailyProgress], tags=["Progress"])
+async def get_user_progress(user_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(
+            cast(ReviewLog.reviewed_at, Date).label("review_date"),
+            func.count(ReviewLog.id).label("count")
+        )
+        .where(ReviewLog.user_id == user_id)
+        .group_by(cast(ReviewLog.reviewed_at, Date))
+        .order_by(cast(ReviewLog.reviewed_at, Date))
+    )
+    
+    progress = []
+    for row in result.all():
+        d, count = row
+        if d:
+            progress.append(DailyProgress(
+                date=d.strftime("%Y-%m-%d"),
+                count=count
+            ))
+    return progress
+
+
+@router.patch("/api/review/{flashcard_id}", status_code=200, tags=["Review"])
+async def submit_review(flashcard_id: UUID, payload: SM2ReviewInput, db: AsyncSession = Depends(get_db)):
+    flashcard = await db.get(Flashcard, flashcard_id)
+    if not flashcard:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+
+    if payload.grade < 1 or payload.grade > 4:
+        raise HTTPException(status_code=400, detail="Grade must be 1-4")
+
+    new_ease, new_interval, new_reps = calculate_sm2(
+        ease_factor=flashcard.ease_factor,
+        interval_days=flashcard.interval_days,
+        repetition_count=flashcard.repetition_count,
+        grade=payload.grade,
+    )
+
+    flashcard.ease_factor = new_ease
+    flashcard.interval_days = new_interval
+    flashcard.repetition_count = new_reps
+    flashcard.next_review_date = get_next_review_date(new_interval)
+    flashcard.updated_at = datetime.now(timezone.utc)
+
+    review = ReviewLog(
+        flashcard_id=flashcard_id,
+        user_id=flashcard.user_id,
+        grade=payload.grade,
+    )
+    db.add(review)
+
+    await db.flush()
+
+    # Recalculate Topic Proficiency
+    cards_result = await db.execute(
+        select(Flashcard.repetition_count).where(Flashcard.topic_id == flashcard.topic_id)
+    )
+    rep_counts = cards_result.scalars().all()
+    
+    total_cards = len(rep_counts)
+    if total_cards > 0:
+        mastered_count = sum(1 for reps in rep_counts if reps >= 4)
+        total_mastery = sum(min(100.0, reps * 25.0) for reps in rep_counts)
+        mastery_score = total_mastery / total_cards
+        
+        prof_result = await db.execute(
+            select(TopicProficiency).where(TopicProficiency.topic_id == flashcard.topic_id)
+        )
+        proficiency = prof_result.scalar_one_or_none()
+        
+        if not proficiency:
+            proficiency = TopicProficiency(
+                user_id=flashcard.user_id,
+                topic_id=flashcard.topic_id,
+                mastery_score=mastery_score,
+                cards_mastered=mastered_count,
+            )
+            db.add(proficiency)
+        else:
+            proficiency.mastery_score = mastery_score
+            proficiency.cards_mastered = mastered_count
+            proficiency.last_evaluated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return {"status": "ok", "next_review_date": flashcard.next_review_date.isoformat()}
+
+
+@router.post("/api/generate-content", response_model=GenerateContentResponse, tags=["Content"])
+async def generate_content(payload: GenerateContentRequest):
+    llm = get_llm_service()
+    content = await llm.generate_topic_content(payload.topic_name)
+    return GenerateContentResponse(markdown_text=content)
+
+
+@router.post("/api/supplement-content", response_model=SupplementContentResponse, tags=["Content"])
+async def supplement_content(payload: SupplementContentRequest):
+    llm = get_llm_service()
+    content = await llm.supplement_topic_content(payload.topic_name, payload.markdown_text)
+    return SupplementContentResponse(markdown_text=content)
+

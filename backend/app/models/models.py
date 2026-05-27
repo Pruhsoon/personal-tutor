@@ -71,6 +71,10 @@ class Flashcard(Base):
     topic = relationship("Topic", back_populates="flashcards")
     review_logs = relationship("ReviewLog", back_populates="flashcard", cascade="all, delete-orphan")
 
+    @property
+    def topic_name(self) -> str:
+        return self.topic.name if self.topic else ""
+
 
 class ReviewLog(Base):
     __tablename__ = "review_logs"

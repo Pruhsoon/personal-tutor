@@ -30,45 +30,66 @@
     @apply border-border;
   }
 
+  html {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #3b82f6 #f1f5f9;
+  }
+
   body {
-    @apply bg-background text-slate-900 antialiased;
+    @apply bg-white text-slate-900 antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-}
 
-/* ── Custom Blue Scrollbar ─────────────────────────────────────────────── */
+  /* Webkit custom scrollbar — only on html, not nested containers */
+  html::-webkit-scrollbar {
+    width: 8px;
+  }
 
-/* Only apply custom scrollbar to the root scrollable element */
-html {
-  scrollbar-width: thin;
-  scrollbar-color: #3b82f6 #f1f5f9;
-}
+  html::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
 
-/* Webkit custom scrollbar — only for the html element, not nested containers */
-html::-webkit-scrollbar {
-  width: 8px;
-}
+  html::-webkit-scrollbar-thumb {
+    background: #3b82f6;
+    border-radius: 4px;
+  }
 
-html::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-}
+  html::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+  }
 
-html::-webkit-scrollbar-thumb {
-  background: #3b82f6;
-  border-radius: 4px;
-}
+  /* Kill all nested scrollbars except those explicitly opting in */
+  body *:not(.show-scrollbar)::-webkit-scrollbar {
+    display: none;
+  }
 
-html::-webkit-scrollbar-thumb:hover {
-  background: #2563eb;
-}
+  body *:not(.show-scrollbar) {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
 
-/* Hide nested scrollbars on all children to ensure only one master scrollbar */
-body *::-webkit-scrollbar {
-  display: none;
-}
-
-body * {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  /* Custom scrollbar for explicit elements */
+  body .show-scrollbar::-webkit-scrollbar {
+    display: block;
+    height: 8px;
+    width: 8px;
+  }
+  body .show-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
+  body .show-scrollbar::-webkit-scrollbar-thumb {
+    background: #3b82f6;
+    border-radius: 4px;
+  }
+  body .show-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+  }
+  body .show-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: #3b82f6 #f1f5f9;
+    -ms-overflow-style: auto;
+  }
 }

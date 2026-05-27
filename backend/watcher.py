@@ -53,7 +53,7 @@ class ObsidianHandler(FileSystemEventHandler):
             logger.error("Failed to read %s: %s", path, exc)
             return
 
-        frontmatter = self._parse_frontmatter(content)
+        frontmatter, body = self._split_frontmatter_and_body(content)
         if frontmatter is None:
             logger.info("No frontmatter in %s — skipping", Path(path).name)
             return
@@ -66,6 +66,61 @@ class ObsidianHandler(FileSystemEventHandler):
             logger.warning("No topic_name in frontmatter of %s — skipping", Path(path).name)
             return
 
+        body_stripped = body.strip()
+        # Clean up any initial markdown heading if it's just "# Topic Name"
+        heading_matches = [
+            f"# {topic_name}",
+            f"# {topic_name.lower()}",
+            f"# {topic_name.upper()}"
+        ]
+        is_empty_body = not body_stripped or body_stripped in heading_matches
+
+        # Case 1: Body is empty - Auto-generate complete content
+        if is_empty_body:
+            logger.info("Note body for '%s' is empty. Requesting complete content generation...", topic_name)
+            try:
+                gen_resp = requests.post("http://localhost:8000/api/generate-content", json={"topic_name": topic_name}, timeout=120)
+                if gen_resp.status_code == 200:
+                    generated_markdown = gen_resp.json().get("markdown_text", "")
+                    # Construct content with generated notes
+                    yaml_str = yaml.dump(frontmatter, sort_keys=False).strip()
+                    new_content = f"---\n{yaml_str}\n---\n\n# {topic_name}\n\n{generated_markdown}\n"
+                    Path(path).write_text(new_content, encoding="utf-8")
+                    logger.info("Auto-generated study notes for '%s' and wrote back to %s", topic_name, Path(path).name)
+                    # The write-back will trigger a new file modified event, which will do the normal ingestion next
+                    return
+                else:
+                    logger.error("Failed to generate content: %d — %s", gen_resp.status_code, gen_resp.text[:200])
+                    return
+            except requests.RequestException as exc:
+                logger.error("Generate request failed: %s", exc)
+                return
+
+        # Case 2: User wants to supplement notes with missing basics
+        if frontmatter.get("supplement_on_sync") is True:
+            logger.info("Note '%s' has supplement_on_sync enabled. Scanning for missing basics...", topic_name)
+            try:
+                supp_resp = requests.post(
+                    "http://localhost:8000/api/supplement-content",
+                    json={"topic_name": topic_name, "markdown_text": body},
+                    timeout=120
+                )
+                if supp_resp.status_code == 200:
+                    supplemental_markdown = supp_resp.json().get("markdown_text", "")
+                    # Flip the flag to prevent infinite loops on reload
+                    frontmatter["supplement_on_sync"] = False
+                    yaml_str = yaml.dump(frontmatter, sort_keys=False).strip()
+                    
+                    new_content = f"---\n{yaml_str}\n---\n{body.rstrip()}\n\n{supplemental_markdown}\n"
+                    Path(path).write_text(new_content, encoding="utf-8")
+                    logger.info("Appended supplemental foundations for '%s' and updated frontmatter in %s", topic_name, Path(path).name)
+                    return
+                else:
+                    logger.error("Failed to supplement content: %d — %s", supp_resp.status_code, supp_resp.text[:200])
+            except requests.RequestException as exc:
+                logger.error("Supplement request failed: %s", exc)
+
+        # Proceed to normal flashcard ingestion
         payload = {
             "markdown_text": content,
             "topic_name": topic_name,
@@ -83,25 +138,24 @@ class ObsidianHandler(FileSystemEventHandler):
             logger.error("Request failed for %s: %s", Path(path).name, exc)
 
     @staticmethod
-    def _parse_frontmatter(content: str) -> dict | None:
+    def _split_frontmatter_and_body(content: str) -> tuple[dict | None, str]:
         stripped = content.lstrip()
         if not stripped.startswith("---"):
-            return None
+            return None, content
 
         parts = stripped.split("---", 2)
         if len(parts) < 3:
-            return None
+            return None, content
 
         yaml_str = parts[1].strip()
-        if not yaml_str:
-            return None
+        body = parts[2]
 
         try:
             parsed = yaml.safe_load(yaml_str)
-            return parsed if isinstance(parsed, dict) else None
+            return (parsed if isinstance(parsed, dict) else None), body
         except yaml.YAMLError as exc:
             logger.warning("YAML parse error: %s", exc)
-            return None
+            return None, content
 
 
 def main() -> None:

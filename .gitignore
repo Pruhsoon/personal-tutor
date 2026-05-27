@@ -1,16 +1,17 @@
-nextjs-frontend/
+# Dependencies
 node_modules/
 __pycache__/
 *.pyc
-.env
 venv/
 .venv/
 
-google api interactions.md
-google api interaction.md
-Plan.md
+# Build outputs
+.next/
 
-# Agentic & system files
-CLAUDE.md
-AGENTS.md
-.commandcode/
+# Environment files (never commit real credentials)
+.env
+.env.local
+
+# Design documents & notes (not production code)
+table_schema.sql
+google api interactions.md

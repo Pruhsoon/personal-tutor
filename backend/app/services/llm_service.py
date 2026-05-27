@@ -59,6 +59,33 @@ REMEDIAL_PLAN_PROMPT = """You are an expert tutor creating a personalized remedi
 4. Return ONLY valid Markdown text. Do not wrap in JSON.
 """
 
+TOPIC_GENERATION_PROMPT = """You are an expert technical writer and curriculum designer. 
+Your task is to write comprehensive, structured, and high-quality Markdown study notes for the topic "{topic_name}".
+
+## Instructions
+1. Cover the topic thoroughly, starting from foundational/basic concepts and moving to intermediate and advanced concepts.
+2. Include:
+   - Clear explanations of core components and architecture.
+   - Code examples or configuration snippets with comments where relevant.
+   - Use cases, standard commands, and best practices.
+   - Common pitfalls and how to avoid them.
+3. Organize the content with clear headings (H2, H3), bullet points, and code blocks.
+4. Return ONLY the Markdown content. Do not include any HTML, wrapper JSON, or frontmatter.
+"""
+
+TOPIC_SUPPLEMENT_PROMPT = """You are an expert technical writer and tutor. 
+Your task is to analyze the student's study notes on "{topic_name}", identify any missing core or foundational concepts, and generate a supplemental section to enrich their notes.
+
+## Student's Current Notes:
+{current_content}
+
+## Instructions
+1. Identify key basic or core concepts of "{topic_name}" that are missing from the student's notes.
+2. Generate structured Markdown content covering these missing concepts.
+3. Do not repeat concepts already clearly explained in the current notes.
+4. Return ONLY the new supplemental Markdown content (starting with a clear heading like "## Supplemental Foundations"). Do not include any JSON wrapper or frontmatter.
+"""
+
 
 class BaseLLMService(ABC):
     """Abstract base for LLM interactions. Swap implementations to change providers."""
@@ -71,6 +98,16 @@ class BaseLLMService(ABC):
     @abstractmethod
     async def generate_remedial_plan(self, topic_name: str, weak_concepts: str) -> str:
         """Generate a Markdown study plan targeting weak areas."""
+        ...
+
+    @abstractmethod
+    async def generate_topic_content(self, topic_name: str) -> str:
+        """Generate complete study notes for a topic."""
+        ...
+
+    @abstractmethod
+    async def supplement_topic_content(self, topic_name: str, current_content: str) -> str:
+        """Identify missing basics and generate supplemental notes."""
         ...
 
 
@@ -86,6 +123,10 @@ class GeminiService(BaseLLMService):
         )
         self._remedial_config = GenerateContentConfig(
             temperature=0.8,
+            max_output_tokens=4096,
+        )
+        self._generation_config = GenerateContentConfig(
+            temperature=0.7,
             max_output_tokens=4096,
         )
 
@@ -111,6 +152,29 @@ class GeminiService(BaseLLMService):
             model="gemini-3.5-flash",
             contents=prompt,
             config=self._remedial_config,
+        )
+        return response.text
+
+    async def generate_topic_content(self, topic_name: str) -> str:
+        """Generate complete Markdown study notes for a topic."""
+        prompt = TOPIC_GENERATION_PROMPT.format(topic_name=topic_name)
+        response = await self.client.aio.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt,
+            config=self._generation_config,
+        )
+        return response.text
+
+    async def supplement_topic_content(self, topic_name: str, current_content: str) -> str:
+        """Analyze notes, find missing concepts, and return supplemental Markdown."""
+        prompt = TOPIC_SUPPLEMENT_PROMPT.format(
+            topic_name=topic_name,
+            current_content=current_content,
+        )
+        response = await self.client.aio.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt,
+            config=self._generation_config,
         )
         return response.text
 

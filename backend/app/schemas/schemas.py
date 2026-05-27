@@ -47,6 +47,7 @@ class FlashcardResponse(BaseModel):
     interval_days: float
     ease_factor: float
     next_review_date: datetime
+    topic_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -63,6 +64,10 @@ class SM2Output(BaseModel):
     interval_days: float
     repetition_count: int
     next_review_date: datetime
+
+
+class SM2ReviewInput(BaseModel):
+    grade: int = Field(..., ge=1, le=4, description="1=Again, 2=Hard, 3=Good, 4=Easy")
 
 
 # ── LLM Structured Output Schemas ──────────────────────────────────────────
@@ -121,3 +126,28 @@ class TopicWithProficiency(BaseModel):
 
 class DueCardsCount(BaseModel):
     count: int
+
+
+class DailyProgress(BaseModel):
+    date: str
+    count: int
+
+
+# ── Content Generation Endpoints ──────────────────────────────────────────
+
+class GenerateContentRequest(BaseModel):
+    topic_name: str
+
+
+class GenerateContentResponse(BaseModel):
+    markdown_text: str
+
+
+class SupplementContentRequest(BaseModel):
+    topic_name: str
+    markdown_text: str
+
+
+class SupplementContentResponse(BaseModel):
+    markdown_text: str
+
