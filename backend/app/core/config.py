@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     )
     GEMINI_API_KEY: str = ""
     APP_ENV: str = "development"
+    OBSIDIAN_VAULT_PATH: str = ""
+    DEFAULT_USER_ID: str = ""
 
     class Config:
         env_file = ".env"

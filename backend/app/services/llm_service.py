@@ -93,7 +93,7 @@ class GeminiService(BaseLLMService):
         """Call Gemini, parse structured JSON, and return validated flashcards."""
         full_prompt = f"{GENERATION_PROMPT}\n\n## Study Material\n\n{markdown_text}"
         response = await self.client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.5-flash",
             contents=full_prompt,
             config=self._flashcard_config,
         )
@@ -108,7 +108,7 @@ class GeminiService(BaseLLMService):
             weak_concepts=weak_concepts,
         )
         response = await self.client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.5-flash",
             contents=prompt,
             config=self._remedial_config,
         )

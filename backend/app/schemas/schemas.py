@@ -99,4 +99,25 @@ class FlashcardGenerationResponse(BaseModel):
 
 class IngestPayload(BaseModel):
     markdown_text: str = Field(..., min_length=1, description="Raw Markdown content from Obsidian note")
-    topic_id: UUID = Field(..., description="Target topic for the generated flashcards")
+    topic_id: Optional[UUID] = Field(None, description="Target topic UUID for the generated flashcards")
+    topic_name: Optional[str] = Field(None, description="Topic name — looked up or created if not found")
+    user_id: Optional[UUID] = Field(None, description="User ID for topic ownership when using topic_name")
+
+
+# ── Dashboard Schemas ─────────────────────────────────────────────────────
+
+class TopicWithProficiency(BaseModel):
+    id: UUID
+    user_id: UUID
+    name: str
+    obsidian_file_path: Optional[str] = None
+    created_at: datetime
+    mastery_score: float = 0.0
+    cards_total: int = 0
+    cards_due: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class DueCardsCount(BaseModel):
+    count: int

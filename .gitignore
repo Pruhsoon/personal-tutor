@@ -5,3 +5,12 @@ __pycache__/
 .env
 venv/
 .venv/
+
+google api interactions.md
+google api interaction.md
+Plan.md
+
+# Agentic & system files
+CLAUDE.md
+AGENTS.md
+.commandcode/
