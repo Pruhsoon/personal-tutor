@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -63,3 +63,40 @@ class SM2Output(BaseModel):
     interval_days: float
     repetition_count: int
     next_review_date: datetime
+
+
+# ── LLM Structured Output Schemas ──────────────────────────────────────────
+
+class StandardFlashcardSchema(BaseModel):
+    card_type: Literal["standard"] = "standard"
+    front_content: str = Field(..., description="The question or prompt on the front of the card")
+    back_content: str = Field(..., description="The answer or explanation on the back of the card")
+    difficulty_level: int = Field(..., ge=1, le=5, description="Perceived difficulty: 1 (easiest) to 5 (hardest)")
+
+
+class CodeMCQExtraData(BaseModel):
+    language: str = Field(..., description="Programming language of the code snippet (e.g. python, javascript, rust)")
+    options: list[str] = Field(..., min_length=2, description="Multiple-choice answer options")
+    correct_index: int = Field(..., ge=0, description="Zero-based index of the correct option")
+    explanation: str = Field(..., description="Explanation of why the correct answer is right")
+
+
+class CodeMCQSchema(BaseModel):
+    card_type: Literal["code_mcq"] = "code_mcq"
+    front_content: str = Field(..., description="The code snippet shown on the front of the card")
+    back_content: str = Field(..., description="The correct answer text shown on the back")
+    difficulty_level: int = Field(..., ge=1, le=5, description="Perceived difficulty: 1 (easiest) to 5 (hardest)")
+    extra_data: CodeMCQExtraData = Field(..., description="Full MCQ metadata: language, options, correct_index, explanation")
+
+
+class FlashcardGenerationResponse(BaseModel):
+    flashcards: list[StandardFlashcardSchema | CodeMCQSchema] = Field(
+        ..., description="Mixed list of standard and code-MCQ flashcards"
+    )
+
+
+# ── Ingest Endpoint Schemas ────────────────────────────────────────────────
+
+class IngestPayload(BaseModel):
+    markdown_text: str = Field(..., min_length=1, description="Raw Markdown content from Obsidian note")
+    topic_id: UUID = Field(..., description="Target topic for the generated flashcards")
