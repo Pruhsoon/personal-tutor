@@ -1,6 +1,6 @@
 # Personal Learner
 
-> An AI-powered spaced-repetition flashcard app with two-way Obsidian sync, built on Gemini 2.5 Flash.
+> An AI-powered spaced-repetition flashcard app with two-way Obsidian sync, built on Gemini 3.5 Flash.
 
 Personal Learner bridges the gap between writing study notes and actually retaining them. Write notes in Obsidian, and the app automatically generates flashcards — including code multiple-choice questions with syntax highlighting. A SuperMemo-2 algorithm schedules reviews for maximum retention, and a GitHub-style heatmap shows your daily progress at a glance.
 
@@ -19,7 +19,7 @@ Most study workflows break at the handoff: you write great notes in Obsidian, th
                                                      │
                                                      ▼
                                             ┌─────────────────┐
-                                            │  Gemini 2.5     │
+                                            │  Gemini 3.5     │
                                             │  Flash          │
                                             └────────┬────────┘
                                                      │
